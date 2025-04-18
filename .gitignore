@@ -1,0 +1,18 @@
+# Node.js dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+logs/
+*.log
+
+# Next.js build output
+.next/
+
+# Static files cache
+out/
+
+# System files
+.DS_Store
