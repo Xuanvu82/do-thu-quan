@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, Typography, Button, List, Pagination, Spin } from 'antd';
 import axios from 'axios';
@@ -8,7 +8,8 @@ import axios from 'axios';
 const { Title, Text } = Typography;
 
 const StoryDetail = ({ params }: { params: { id: string } }) => {
-  const { id } = params;
+  const resolvedParams = use(Promise.resolve(params));
+  const { id } = resolvedParams;
   const router = useRouter();
 
   const [story, setStory] = useState<any>(null);
@@ -17,15 +18,28 @@ const StoryDetail = ({ params }: { params: { id: string } }) => {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalChapters, setTotalChapters] = useState(0);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+
+  const fetchFavorites = useCallback(async () => {
+    try {
+      const favRes = await axios.get('/api/favorites');
+      const favoriteStoryIds = favRes.data.map((favStory: any) => favStory._id);
+      setIsFavorited(favoriteStoryIds.includes(id));
+    } catch (error) {
+      console.error('Error fetching favorites:', error);
+    }
+  }, [id]);
 
   useEffect(() => {
     const fetchStoryDetails = async () => {
       try {
         setLoading(true);
-        const [storyRes, chaptersRes, relatedRes] = await Promise.all([
+        const [storyRes, chaptersRes, relatedRes, _favRes] = await Promise.all([
           axios.get(`/api/stories/${id}`),
           axios.get(`/api/stories/${id}/chapters?page=${currentPage}`),
           axios.get(`/api/stories?relatedTo=${id}`),
+          fetchFavorites()
         ]);
 
         setStory(storyRes.data);
@@ -40,19 +54,35 @@ const StoryDetail = ({ params }: { params: { id: string } }) => {
     };
 
     fetchStoryDetails();
-  }, [id, currentPage]);
+  }, [id, currentPage, fetchFavorites]);
 
-  const handleFollow = async () => {
+  const handleToggleFavorite = async () => {
+    setIsTogglingFavorite(true);
     try {
-      await axios.post(`/api/users/1/favorites`, { storyId: id });
-      alert('Story added to favorites!');
+      if (isFavorited) {
+        await axios.delete(`/api/favorites/${id}`);
+        setIsFavorited(false);
+        alert('Story removed from favorites!');
+      } else {
+        await axios.post(`/api/favorites`, { storyId: id });
+        setIsFavorited(true);
+        alert('Story added to favorites!');
+      }
     } catch (error) {
-      console.error('Error adding to favorites:', error);
+      console.error('Error updating favorites:', error);
+      alert('Failed to update favorites. Please try again.');
+    } finally {
+      setIsTogglingFavorite(false);
     }
   };
 
   const handleChapterClick = (chapterId: string) => {
-    router.push(`/story/${id}/chapter/${chapterId}`);
+    if (chapterId && !chapterId.startsWith('chapter-')) {
+      router.push(`/story/${id}/chapter/${chapterId}`);
+    } else {
+      console.warn('Invalid chapter ID/URL:', chapterId);
+      alert('Cannot navigate to this chapter.');
+    }
   };
 
   if (loading) {
@@ -64,19 +94,29 @@ const StoryDetail = ({ params }: { params: { id: string } }) => {
       {story && (
         <Card style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', gap: '20px' }}>
-            <img src={story.coverImage} alt={story.title} style={{ width: '200px', height: '300px', objectFit: 'cover' }} />
+            <img
+              src={story.coverImage || undefined}
+              alt={story.title}
+              style={{ width: '200px', height: '300px', objectFit: 'cover' }}
+              onError={(e) => { (e.target as HTMLImageElement).src = '/default-cover.jpg'; }}
+            />
             <div>
               <Title level={2}>{story.title}</Title>
               <Text>Author: {story.author}</Text>
               <br />
-              <Text>Genre: {story.genre}</Text>
+              <Text>Genre: {Array.isArray(story.genres) ? story.genres.join(', ') : story.genres}</Text>
               <br />
-              <Text>Status: {story.status}</Text>
+              <Text>Status: {story.status || 'Updating...'}</Text>
               <br />
               <Text>{story.description}</Text>
               <br />
-              <Button type="primary" onClick={handleFollow} style={{ marginTop: '10px' }}>
-                Follow
+              <Button
+                type={isFavorited ? "default" : "primary"}
+                onClick={handleToggleFavorite}
+                style={{ marginTop: '10px' }}
+                loading={isTogglingFavorite}
+              >
+                {isFavorited ? 'Unfollow' : 'Follow'}
               </Button>
             </div>
           </div>
@@ -88,7 +128,7 @@ const StoryDetail = ({ params }: { params: { id: string } }) => {
         bordered
         dataSource={chapters}
         renderItem={(chapter) => (
-          <List.Item onClick={() => handleChapterClick(chapter.id)} style={{ cursor: 'pointer' }}>
+          <List.Item key={chapter.id || chapter.title} onClick={() => handleChapterClick(chapter.id)} style={{ cursor: 'pointer' }}>
             {chapter.title}
           </List.Item>
         )}
@@ -107,7 +147,14 @@ const StoryDetail = ({ params }: { params: { id: string } }) => {
           <Card
             key={related.id}
             hoverable
-            cover={<img alt={related.title} src={related.coverImage} />}
+            cover={
+              <img
+                alt={related.title}
+                src={related.coverImage || undefined}
+                style={{ height: '150px', objectFit: 'cover' }}
+                onError={(e) => { (e.target as HTMLImageElement).src = '/default-cover.jpg'; }}
+              />
+            }
             onClick={() => router.push(`/story/${related.id}`)}
             style={{ width: '200px' }}
           >

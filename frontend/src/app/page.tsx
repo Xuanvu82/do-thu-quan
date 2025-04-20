@@ -4,15 +4,16 @@ import React, { useState, useEffect } from 'react';
 import { Input, Row, Col, Card, Typography, Spin } from 'antd';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import styles from './globals.css';
+import './globals.css'; // Change this line
+import type { Story } from './globals'; // Import the Story type
 
 const { Title, Text } = Typography;
 const { Search } = Input;
 
 const Home = () => {
-  const [featuredStories, setFeaturedStories] = useState([]);
-  const [newStories, setNewStories] = useState([]);
-  const [hotStories, setHotStories] = useState([]);
+  const [featuredStories, setFeaturedStories] = useState<Story[]>([]); // Use Story[] type
+  const [newStories, setNewStories] = useState<Story[]>([]); // Use Story[] type
+  const [hotStories, setHotStories] = useState<Story[]>([]); // Use Story[] type
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -20,10 +21,18 @@ const Home = () => {
     const fetchStories = async () => {
       setLoading(true);
       try {
-        const response = await axios.get('/api/stories');
-        setFeaturedStories(response.data.filter((story) => story.featured));
-        setNewStories(response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-        setHotStories(response.data.filter((story) => story.hot));
+        // Assuming the API returns an array of Story objects
+        const response = await axios.get<{ data: Story[] }>('/api/stories');
+        // Adjust based on actual API response structure if needed
+        const allStories = response.data.data; // Assuming API wraps data in a 'data' property
+        setFeaturedStories(allStories.filter((story: Story) => story.featured)); // Add type Story here
+        // Ensure createdAt is comparable (string or Date)
+        setNewStories([...allStories].sort((a: Story, b: Story) => { // Add types Story here
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        }));
+        setHotStories(allStories.filter((story: Story) => story.hot)); // Add type Story here
       } catch (error) {
         console.error('Error fetching stories:', error);
       } finally {
@@ -38,8 +47,8 @@ const Home = () => {
     router.push(`/search?query=${value}`);
   };
 
-  const renderStories = (stories: any[]) => {
-    return stories.map((story) => (
+  const renderStories = (stories: Story[]) => { // Use Story[] type for the parameter
+    return stories.map((story: Story) => ( // Explicitly type story as Story
       <Col xs={24} sm={12} md={8} lg={6} key={story._id}>
         <Card
           hoverable
